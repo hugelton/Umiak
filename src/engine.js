@@ -23,3 +23,12 @@ export function sequencerValue(notes, phase) {
   const index = Math.floor((((phase % 1) + 1) % 1) * notes.length);
   return { index, pitch: sampleLUT(notes.map(n => n ?? 0), phase), gate: notes[index] !== null };
 }
+
+export function morphWaveTables(tables, position) {
+  if (!Array.isArray(tables) || tables.length === 0) throw new Error('Wave tables required');
+  const size = tables[0].length;
+  if (!size || tables.some(t => t.length !== size)) throw new Error('Wave tables must have equal length');
+  const p = Math.max(0, Math.min(tables.length - 1, Number(position) || 0));
+  const i = Math.floor(p), j = Math.min(tables.length - 1, i + 1), t = p - i;
+  return Float32Array.from({length:size}, (_,k) => tables[i][k] * (1-t) + tables[j][k] * t);
+}
