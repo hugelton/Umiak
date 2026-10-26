@@ -38,7 +38,7 @@ function bindNode(node){
   });
   for(const type of ['pointerup','pointercancel'])title.addEventListener(type,()=>{active=null;notify();});
   node.querySelectorAll('.port').forEach((port,i)=>{
-    const direction=node.dataset.node==='sequence'?'out':i===0?'in':'out';
+    const direction=['sequence','keyboard'].includes(node.dataset.node)?'out':i===0?'in':'out';
     port.style.cursor='pointer';
     port.addEventListener('click',()=>{
       if(direction==='out'){selected={from:node.dataset.node,out:node.dataset.node==='oscillator'?'audio':'pitch'};port.title='Output selected';return;}
@@ -53,6 +53,33 @@ function bindNode(node){
   });
 }
 for(const node of nodes)bindNode(node);
+let noteValues=Array.from({length:16},(_,i)=>i%4===0?0:i%4===2?7:null);
+function renderSequence(){
+  const host=document.getElementById('node-seq-steps');if(!host)return;
+  host.replaceChildren();
+  noteValues.forEach((value,index)=>{
+    const b=document.createElement('button');b.className='mini-step';b.textContent=value===null?'·':String(value);
+    b.title='Step '+(index+1)+': click to cycle note / rest';
+    b.onclick=()=>{
+      const next=value===null?0:value===0?7:value===7?12:null;
+      window.dispatchEvent(new CustomEvent('umiak:step-edit',{detail:{index,value:next}}));
+    };host.append(b);
+  });
+}
+window.addEventListener('umiak:notes',e=>{noteValues=e.detail;renderSequence();});
+renderSequence();
+function addKeyboard(id='keyboard',x=35,y=255){
+ if(patch.nodes.some(n=>n.id===id))return;
+ const model={id,type:'keyboard',x,y};patch.nodes.push(model);
+ const node=document.createElement('div');node.className='node node-keyboard';node.dataset.node=id;
+ node.style.left=x+'px';node.style.top=y+'px';
+ node.innerHTML='<div class="title">Keyboard / MIDI notes</div><div class="ports"><span>C4 – C5</span><span>pitch <i class="port"></i></span></div><div class="mini-keys"></div>';
+ const host=node.querySelector('.mini-keys');
+ for(let i=0;i<13;i++){const b=document.createElement('button');b.textContent=['C','♯','D','♯','E','F','♯','G','♯','A','♯','B','C'][i];b.className=[1,3,6,8,10].includes(i)?'black-key':'';b.addEventListener('pointerdown',()=>window.dispatchEvent(new CustomEvent('umiak:key',{detail:i})));host.append(b);}
+ board.append(node);nodes.push(node);bindNode(node);wire();notify();
+}
+document.getElementById('add-keyboard').onclick=()=>addKeyboard();
+document.getElementById('add-sequence').onclick=()=>{document.querySelector('[data-node="sequence"]')?.scrollIntoView({block:'nearest'});};
 function addProcessor(type='transpose',id=type+'-'+Date.now(),x=190,y=170,value=0){
   if(patch.nodes.some(n=>n.id===id))return;
   const key={transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[type];
@@ -71,6 +98,7 @@ document.getElementById('reconnect').onclick=()=>{patch.connections=defaultPatch
 window.addEventListener('umiak:restore',e=>{
   const p=e.detail;
   if(!p?.nodes||!Array.isArray(p.connections))return;
+  for(const n of p.nodes)if(n.type==='keyboard'&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addKeyboard(n.id,n.x,n.y);
   for(const n of p.nodes)if(['transpose','quantize','scale','invert'].includes(n.type)&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addProcessor(n.type,n.id,n.x,n.y,Number(n[{transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[n.type]])||0);
   for(const n of [...patch.nodes])if(!['step','osc'].includes(n.type)&&!p.nodes.some(x=>x.id===n.id)){
     byId(n.id)?.remove();nodes.splice(nodes.findIndex(x=>x.dataset.node===n.id),1);patch.nodes.splice(patch.nodes.indexOf(n),1);
