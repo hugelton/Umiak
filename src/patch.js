@@ -88,6 +88,8 @@ function bindNode(node){
     });
   });
 }
+const oscillatorNode=byId('oscillator');
+if(oscillatorNode){const jack=document.createElement('div');jack.className='osc-mod-port';jack.innerHTML='<span><i class="port" data-direction="in" data-port="morph"></i> MORPH CV</span>';oscillatorNode.append(jack);}
 for(const node of nodes)bindNode(node);
 let playingStep=-1;
 window.addEventListener('umiak:playhead',e=>{playingStep=e.detail;document.querySelectorAll('#node-seq-steps .mini-step').forEach((b,i)=>b.classList.toggle('is-playing',i===playingStep));});
@@ -128,7 +130,7 @@ function addLFO(id='lfo-'+Date.now(),x=285,y=270,params={}){
  node.querySelectorAll('[data-param]').forEach(input=>{input.value=model[input.dataset.param];input.oninput=()=>{model[input.dataset.param]=input.dataset.param==='shape'?input.value:Number(input.value);notify();};});
  board.append(node);nodes.push(node);bindNode(node);wire();notify();
 }
-document.getElementById('add-lfo').onclick=()=>addLFO();
+const lfoButton=document.createElement('button');lfoButton.textContent='+ LFO';lfoButton.id='add-lfo';document.querySelector('.module-tools').prepend(lfoButton);lfoButton.onclick=()=>addLFO();
 function addMerge(id='merge-'+Date.now(),x=245,y=240){
  if(patch.nodes.some(n=>n.id===id))return;
  patch.nodes.push({id,type:'merge',x,y});
