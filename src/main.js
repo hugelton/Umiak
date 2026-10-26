@@ -2,9 +2,23 @@ import { Playhead } from './lut.js';
 import { evaluatePitch, evaluateMorph } from './graph.js';
 import { createWaveTable, periodicWave, sequencerValue, morphWaveTables } from './engine.js';
 const $ = id => document.getElementById(id);
-let ctx, timer, nextTime = 0, step = 0, customWave;
+let ctx, timer, nextTime = 0, step = 0, customWave, workletReady=false;
 let patchSnapshot = null;
 const activeCustomOscillators = new Set();
+const activeLUTNodes=new Set();
+function currentLFO(){
+ const osc=patchSnapshot?.nodes.find(n=>n.type==='osc');
+ const edge=patchSnapshot?.connections.find(c=>c.to===osc?.id&&c.in==='morph');
+ return patchSnapshot?.nodes.find(n=>n.id===edge?.from&&n.type==='lfo')||null;
+}
+function syncWorklets(){
+ const lfo=currentLFO();
+ for(const node of activeLUTNodes){
+  node.port.postMessage({type:'tables',tables:waveSlots});
+  node.port.postMessage({type:'lfo',config:lfo?{rate:Number(lfo.rate),depth:Number(lfo.depth),center:Number(lfo.center),shape:lfo.shape}:null});
+  if(ctx)node.parameters.get('morph').setTargetAtTime(Number($('morph').value),ctx.currentTime,.015);
+ }
+}
 const waveSlots = [1,2,3,4].map(h => Array.from(createWaveTable(h,64)));
 const curvePoints = Array.from(waveSlots[0]);
 let editingSlot = 0;
@@ -18,19 +32,29 @@ const notes = Array.from({length:16}, (_,i) => i % 4 === 0 ? 0 : i % 4 === 2 ? 7
 const head = new Playhead();
 function voice(midi, at, length = .2) {
   if (!ctx) return;
-  const osc = ctx.createOscillator(), gain = ctx.createGain();
-  if ($('wave').value === 'custom') {
+  const custom=$('wave').value==='custom';
+  const osc=custom&&workletReady?new AudioWorkletNode(ctx,'umiak-lut',{outputChannelCount:[1]}):ctx.createOscillator();
+  const gain = ctx.createGain();
+  if(custom&&workletReady){
+    activeLUTNodes.add(osc);
+    osc.port.postMessage({type:'tables',tables:waveSlots});
+    const lfo=currentLFO();
+    osc.port.postMessage({type:'lfo',config:lfo?{rate:Number(lfo.rate),depth:Number(lfo.depth),center:Number(lfo.center),shape:lfo.shape}:null});
+    osc.parameters.get('frequency').setValueAtTime(440*2**((midi-69)/12),at);
+    osc.parameters.get('morph').setValueAtTime(Number($('morph').value),at);
+    setTimeout(()=>{osc.disconnect();activeLUTNodes.delete(osc);},Math.max(0,(at+length+.08-ctx.currentTime)*1000));
+  }else if (custom) {
     osc.setPeriodicWave(customWave ?? periodicWave(ctx, createWaveTable(1)));
     activeCustomOscillators.add(osc);
     osc.addEventListener('ended', () => activeCustomOscillators.delete(osc), { once: true });
   }
   else osc.type = $('wave').value;
-  osc.frequency.setValueAtTime(440 * 2 ** ((midi - 69) / 12), at);
+  if(!(custom&&workletReady))osc.frequency.setValueAtTime(440 * 2 ** ((midi - 69) / 12), at);
   gain.gain.setValueAtTime(0, at);
   gain.gain.linearRampToValueAtTime(.16, at + .008);
   gain.gain.exponentialRampToValueAtTime(.001, at + length);
   osc.connect(gain).connect(ctx.destination);
-  osc.start(at); osc.stop(at + length + .01);
+  if(!(custom&&workletReady)){osc.start(at);osc.stop(at+length+.01);}
 }
 function renderSteps() {
   $('steps').replaceChildren();
@@ -76,15 +100,17 @@ function draw() {
   g.stroke();
 }
 function syncWave() {
-  if (ctx) {
+  if (ctx && !workletReady) {
     customWave = periodicWave(ctx, Float32Array.from(curvePoints));
     for (const osc of activeCustomOscillators) osc.setPeriodicWave(customWave);
   }
+  if(workletReady)syncWorklets();
   draw();
 }
 $('audio').onclick = async () => {
   ctx ??= new AudioContext();
   await ctx.resume();
+  if(!workletReady){try{await ctx.audioWorklet.addModule(new URL('./lut-processor.js',import.meta.url));workletReady=true;}catch(error){console.warn('AudioWorklet unavailable; using PeriodicWave fallback',error);}}
   syncWave();
   $('status').textContent = 'Audio enabled';
 };
@@ -174,6 +200,7 @@ window.addEventListener('umiak:step-edit',e=>{
 window.addEventListener('umiak:patch', e => {
   patchSnapshot=e.detail;
   lastMorphPosition=-1;
+  syncWorklets();
 });
 $('save').onclick=()=>{
   const project={version:1,bpm:Number($('bpm').value),wave:$('wave').value,
