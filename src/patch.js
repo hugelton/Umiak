@@ -53,23 +53,29 @@ function bindNode(node){
   });
 }
 for(const node of nodes)bindNode(node);
-document.getElementById('add-transpose').onclick=()=>{
-  const id='transpose-'+Date.now();
-  const model={id,type:'transpose',semitones:0,x:190,y:170};patch.nodes.push(model);
+function addTranspose(id='transpose-'+Date.now(),x=190,y=170,semitones=0){
+  if(patch.nodes.some(n=>n.id===id))return;
+  const model={id,type:'transpose',semitones,x,y};patch.nodes.push(model);
   const node=document.createElement('div');node.className='node';node.dataset.node=id;
-  node.style.left=model.x+'px';node.style.top=model.y+'px';
+  node.style.left=x+'px';node.style.top=y+'px';
   node.innerHTML='<div class="title">Transpose</div><div class="ports"><span><i class="port"></i> pitch</span><span>pitch <i class="port"></i></span></div><label style="display:block;padding:0 10px 10px">Semitones <input type="number" min="-24" max="24" value="0" style="width:70px"></label>';
   const input=node.querySelector('input');input.oninput=()=>{model.semitones=Math.max(-24,Math.min(24,Number(input.value)||0));notify();};
+  input.value=semitones;
   board.append(node);nodes.push(node);bindNode(node);wire();notify();
-};
+}
+document.getElementById('add-transpose').onclick=()=>addTranspose();
 document.getElementById('disconnect').onclick=()=>{patch.connections=[];wire();notify();};
 document.getElementById('reconnect').onclick=()=>{patch.connections=defaultPatch().connections;wire();notify();};
 window.addEventListener('umiak:restore',e=>{
   const p=e.detail;
   if(!p?.nodes||!Array.isArray(p.connections))return;
+  for(const n of p.nodes)if(n.type==='transpose'&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addTranspose(n.id,n.x,n.y,Number(n.semitones)||0);
+  for(const n of [...patch.nodes])if(n.type==='transpose'&&!p.nodes.some(x=>x.id===n.id)){
+    byId(n.id)?.remove();nodes.splice(nodes.findIndex(x=>x.dataset.node===n.id),1);patch.nodes.splice(patch.nodes.indexOf(n),1);
+  }
   patch.connections=[];
   for(const c of p.connections)if(validateConnection(patch,c))patch.connections.push(c);
-  for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;el.style.left=n.x+'px';el.style.top=n.y+'px';}}
+  for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;if(model.type==='transpose')model.semitones=Math.max(-24,Math.min(24,Number(n.semitones)||0));el.style.left=n.x+'px';el.style.top=n.y+'px';}}
   wire();notify();
 });
 new ResizeObserver(wire).observe(board);wire();notify();
