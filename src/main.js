@@ -2,13 +2,18 @@ import { Playhead } from './lut.js';
 import { createWaveTable, periodicWave, sequencerValue } from './engine.js';
 const $ = id => document.getElementById(id);
 let ctx, timer, nextTime = 0, step = 0, customWave;
+const activeCustomOscillators = new Set();
 const curvePoints = Array.from(createWaveTable(1, 64));
 const notes = Array.from({length:16}, (_,i) => i % 4 === 0 ? 0 : i % 4 === 2 ? 7 : null);
 const head = new Playhead();
 function voice(midi, at, length = .2) {
   if (!ctx) return;
   const osc = ctx.createOscillator(), gain = ctx.createGain();
-  if ($('wave').value === 'custom') osc.setPeriodicWave(customWave ?? periodicWave(ctx, createWaveTable(1)));
+  if ($('wave').value === 'custom') {
+    osc.setPeriodicWave(customWave ?? periodicWave(ctx, createWaveTable(1)));
+    activeCustomOscillators.add(osc);
+    osc.addEventListener('ended', () => activeCustomOscillators.delete(osc), { once: true });
+  }
   else osc.type = $('wave').value;
   osc.frequency.setValueAtTime(440 * 2 ** ((midi - 69) / 12), at);
   gain.gain.setValueAtTime(0, at);
@@ -43,16 +48,26 @@ function tick() {
   }
 }
 function draw() {
-  const c = $('curve'), g = c.getContext('2d'), n = Number($('harmonic').value);
-  g.clearRect(0,0,c.width,c.height);
+  const c = $('curve'), g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height);
   g.beginPath();
-  for(let x=0;x<c.width;x++) {
-    const phase=x/c.width, index=Math.floor(phase*curvePoints.length);
-    const value=curvePoints[index];
-    const y=c.height/2-value*c.height*.42;
-    if(x===0) g.moveTo(x,y); else g.lineTo(x,y);
+  for (let x = 0; x <= c.width; x++) {
+    const phase = x / c.width * curvePoints.length;
+    const i = Math.min(curvePoints.length - 1, Math.floor(phase));
+    const fraction = phase - i;
+    const value = curvePoints[i] * (1 - fraction) +
+      curvePoints[(i + 1) % curvePoints.length] * fraction;
+    const y = c.height * (1 - value) / 2;
+    if (x === 0) g.moveTo(x, y); else g.lineTo(x, y);
   }
   g.stroke();
+}
+function syncWave() {
+  if (ctx) {
+    customWave = periodicWave(ctx, Float32Array.from(curvePoints));
+    for (const osc of activeCustomOscillators) osc.setPeriodicWave(customWave);
+  }
+  draw();
 }
 $('audio').onclick = async () => {
   ctx ??= new AudioContext();
@@ -69,25 +84,44 @@ $('reset').onclick = () => {head.reset();step=0; if(ctx && head.running) nextTim
 function rebuildWave() {
   const table = createWaveTable(Number($('harmonic').value), curvePoints.length);
   curvePoints.splice(0, curvePoints.length, ...table);
-  if (ctx) customWave = periodicWave(ctx, Float32Array.from(curvePoints));
-  draw();
+  syncWave();
 }
 $('harmonic').oninput = rebuildWave;
 const canvas = $('curve');
-let painting = false;
-function paint(e) {
-  if (!painting) return;
-  const r=canvas.getBoundingClientRect();
-  const x=Math.max(0,Math.min(.999,(e.clientX-r.left)/r.width));
-  const y=Math.max(-1,Math.min(1,1-2*(e.clientY-r.top)/r.height));
-  curvePoints[Math.floor(x*curvePoints.length)] = y;
-  if(ctx) customWave=periodicWave(ctx,Float32Array.from(curvePoints));
-  draw();
+canvas.style.touchAction = 'none';
+let lastPoint = null;
+function point(e) {
+  const r = canvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(curvePoints.length - 1, Math.floor((e.clientX - r.left) / r.width * curvePoints.length))),
+    y: Math.max(-1, Math.min(1, 1 - 2 * (e.clientY - r.top) / r.height))
+  };
 }
-canvas.addEventListener('pointerdown', e=>{painting=true;canvas.setPointerCapture(e.pointerId);paint(e);});
-canvas.addEventListener('pointermove',paint);
-canvas.addEventListener('pointerup',()=>painting=false);
-canvas.addEventListener('pointercancel',()=>painting=false);
+function paint(e) {
+  if (!lastPoint) return;
+  const current = point(e);
+  const start = lastPoint;
+  const distance = Math.abs(current.x - start.x);
+  for (let n = 0; n <= distance; n++) {
+    const t = distance ? n / distance : 1;
+    const i = Math.round(start.x + (current.x - start.x) * t);
+    curvePoints[i] = start.y + (current.y - start.y) * t;
+  }
+  lastPoint = current;
+  syncWave();
+}
+canvas.addEventListener('pointerdown', e => {
+  canvas.setPointerCapture(e.pointerId);
+  lastPoint = point(e);
+  curvePoints[lastPoint.x] = lastPoint.y;
+  syncWave();
+});
+canvas.addEventListener('pointermove', e => {
+  if (canvas.hasPointerCapture(e.pointerId)) paint(e);
+});
+function endPaint() { lastPoint = null; }
+canvas.addEventListener('pointerup', endPaint);
+canvas.addEventListener('pointercancel', endPaint);
 const keys = $('keys');
 for(let i=0;i<13;i++) {
   const b=document.createElement('button');
