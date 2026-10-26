@@ -20,7 +20,7 @@ function wire(){
   }
 }
 function notify(){window.dispatchEvent(new CustomEvent('umiak:patch',{detail:structuredClone(patch)}));}
-for(const node of nodes){
+function bindNode(node){
   const title=node.querySelector('.title');
   title.addEventListener('pointerdown',e=>{
     const r=node.getBoundingClientRect();
@@ -41,7 +41,7 @@ for(const node of nodes){
     const direction=node.dataset.node==='sequence'?'out':i===0?'in':'out';
     port.style.cursor='pointer';
     port.addEventListener('click',()=>{
-      if(direction==='out'){selected={from:node.dataset.node,out:node.dataset.node==='sequence'?'pitch':'audio'};port.title='Output selected';return;}
+      if(direction==='out'){selected={from:node.dataset.node,out:node.dataset.node==='oscillator'?'audio':'pitch'};port.title='Output selected';return;}
       if(!selected)return;
       const c={...selected,to:node.dataset.node,in:'pitch'};
       if(validateConnection(patch,c)){
@@ -52,12 +52,23 @@ for(const node of nodes){
     });
   });
 }
+for(const node of nodes)bindNode(node);
+document.getElementById('add-transpose').onclick=()=>{
+  const id='transpose-'+Date.now();
+  const model={id,type:'transpose',semitones:0,x:190,y:170};patch.nodes.push(model);
+  const node=document.createElement('div');node.className='node';node.dataset.node=id;
+  node.style.left=model.x+'px';node.style.top=model.y+'px';
+  node.innerHTML='<div class="title">Transpose</div><div class="ports"><span><i class="port"></i> pitch</span><span>pitch <i class="port"></i></span></div><label style="display:block;padding:0 10px 10px">Semitones <input type="number" min="-24" max="24" value="0" style="width:70px"></label>';
+  const input=node.querySelector('input');input.oninput=()=>{model.semitones=Math.max(-24,Math.min(24,Number(input.value)||0));notify();};
+  board.append(node);nodes.push(node);bindNode(node);wire();notify();
+};
 document.getElementById('disconnect').onclick=()=>{patch.connections=[];wire();notify();};
 document.getElementById('reconnect').onclick=()=>{patch.connections=defaultPatch().connections;wire();notify();};
 window.addEventListener('umiak:restore',e=>{
   const p=e.detail;
   if(!p?.nodes||!Array.isArray(p.connections))return;
-  patch.connections=p.connections.filter(c=>validateConnection(patch,c));
+  patch.connections=[];
+  for(const c of p.connections)if(validateConnection(patch,c))patch.connections.push(c);
   for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;el.style.left=n.x+'px';el.style.top=n.y+'px';}}
   wire();notify();
 });
