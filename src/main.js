@@ -1,11 +1,13 @@
 import { Playhead } from './lut.js';
 import { evaluatePitch } from './graph.js';
-import { createWaveTable, periodicWave, sequencerValue } from './engine.js';
+import { createWaveTable, periodicWave, sequencerValue, morphWaveTables } from './engine.js';
 const $ = id => document.getElementById(id);
 let ctx, timer, nextTime = 0, step = 0, customWave;
 let sequenceConnected = true, patchSnapshot = null;
 const activeCustomOscillators = new Set();
-const curvePoints = Array.from(createWaveTable(1, 64));
+const waveSlots = [1,2,3,4].map(h => Array.from(createWaveTable(h,64)));
+const curvePoints = Array.from(waveSlots[0]);
+let editingSlot = 0;
 const notes = Array.from({length:16}, (_,i) => i % 4 === 0 ? 0 : i % 4 === 2 ? 7 : null);
 const head = new Playhead();
 function voice(midi, at, length = .2) {
@@ -86,9 +88,24 @@ $('stop').onclick = () => head.stop();
 $('reset').onclick = () => {head.reset();step=0; if(ctx && head.running) nextTime=ctx.currentTime+.03;};
 function rebuildWave() {
   const table = createWaveTable(Number($('harmonic').value), curvePoints.length);
+  waveSlots[editingSlot] = Array.from(table);
+  refreshMorph();
+}
+function refreshMorph() {
+  const table = morphWaveTables(waveSlots, Number($('morph').value));
   curvePoints.splice(0, curvePoints.length, ...table);
+  $('morph-value').textContent = Number($('morph').value).toFixed(2);
   syncWave();
 }
+function editSlot(index) {
+  editingSlot=index;
+  $('slot-label').textContent=String(index+1);
+  document.querySelectorAll('[data-slot]').forEach(b=>b.setAttribute('aria-pressed',String(Number(b.dataset.slot)===index)));
+  $('morph').value=String(index);
+  refreshMorph();
+}
+document.querySelectorAll('[data-slot]').forEach(b=>b.onclick=()=>editSlot(Number(b.dataset.slot)));
+$('morph').oninput=refreshMorph;
 $('harmonic').oninput = rebuildWave;
 const canvas = $('curve');
 canvas.style.touchAction = 'none';
@@ -111,13 +128,15 @@ function paint(e) {
     curvePoints[i] = start.y + (current.y - start.y) * t;
   }
   lastPoint = current;
-  syncWave();
+  waveSlots[editingSlot]=[...curvePoints];
+  refreshMorph();
 }
 canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
   lastPoint = point(e);
   curvePoints[lastPoint.x] = lastPoint.y;
-  syncWave();
+  waveSlots[editingSlot]=[...curvePoints];
+  refreshMorph();
 });
 canvas.addEventListener('pointermove', e => {
   if (canvas.hasPointerCapture(e.pointerId)) paint(e);
@@ -138,7 +157,7 @@ window.addEventListener('umiak:patch', e => {
 });
 $('save').onclick=()=>{
   const project={version:1,bpm:Number($('bpm').value),wave:$('wave').value,
-    notes:[...notes],curve:[...curvePoints],patch:patchSnapshot};
+    notes:[...notes],curve:[...curvePoints],waveSlots:waveSlots.map(t=>[...t]),morph:Number($('morph').value),patch:patchSnapshot};
   const url=URL.createObjectURL(new Blob([JSON.stringify(project,null,2)],{type:'application/json'}));
   const a=document.createElement('a');a.href=url;a.download='umiak-project.json';a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
@@ -152,13 +171,19 @@ $('load').addEventListener('change',async e=>{
       !p.notes.every(n=>n===null||(Number.isFinite(n)&&n>=-24&&n<=36))||
       !p.curve.every(n=>Number.isFinite(n)&&n>=-1&&n<=1))throw Error('Invalid project');
     notes.splice(0,notes.length,...p.notes);
-    curvePoints.splice(0,curvePoints.length,...p.curve);
+    if(p.waveSlots!==undefined){
+      if(!Array.isArray(p.waveSlots)||p.waveSlots.length!==4||!p.waveSlots.every(t=>Array.isArray(t)&&t.length===64&&t.every(v=>Number.isFinite(v)&&v>=-1&&v<=1)))throw Error('Invalid wave slots');
+      p.waveSlots.forEach((t,i)=>waveSlots[i]=[...t]);
+    }else waveSlots[0]=[...p.curve];
+    $('morph').value=String(Math.max(0,Math.min(3,Number(p.morph)||0)));
+    editingSlot=Math.floor(Number($('morph').value));
+    $('slot-label').textContent=String(editingSlot+1);
     $('bpm').value=Math.max(20,Math.min(300,Number(p.bpm)||120));
     if(['sine','triangle','sawtooth','square','custom'].includes(p.wave))$('wave').value=p.wave;
-    renderSteps();syncWave();
+    renderSteps();refreshMorph();
     if(p.patch)window.dispatchEvent(new CustomEvent('umiak:restore',{detail:p.patch}));
     $('status').textContent='Project loaded';
   }catch(error){$('status').textContent='Could not load project: '+error.message;}
   e.target.value='';
 });
-renderSteps();rebuildWave();
+renderSteps();editSlot(0);
