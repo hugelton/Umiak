@@ -3,7 +3,7 @@ export const defaultPatch = () => ({
   connections:[{from:'sequence',out:'pitch',to:'oscillator',in:'pitch'}]
 });
 export function validateConnection(patch,connection){
-  const types={step:{outputs:{pitch:'cv'}},transpose:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},osc:{inputs:{pitch:'cv'},outputs:{audio:'audio'}}};
+  const types={step:{outputs:{pitch:'cv'}},transpose:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},quantize:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},scale:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},invert:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},osc:{inputs:{pitch:'cv'},outputs:{audio:'audio'}}};
   const a=patch.nodes.find(n=>n.id===connection.from),b=patch.nodes.find(n=>n.id===connection.to);
   if(!a||!b||a.id===b.id)return false;
   if(types[a.type]?.outputs?.[connection.out]!==types[b.type]?.inputs?.[connection.in])return false;
@@ -30,7 +30,11 @@ export function evaluatePitch(patch,pitch){
     if(!edge)return null;
     const input=resolve(edge.from);
     if(input===null)return null;
-    return node.type==='transpose'?input+Math.max(-24,Math.min(24,Number(node.semitones)||0)):input;
+    if(node.type==='transpose')return input+Math.max(-24,Math.min(24,Number(node.semitones)||0));
+    if(node.type==='scale')return input*Math.max(-4,Math.min(4,Number(node.factor)??1));
+    if(node.type==='invert')return 2*(Number(node.center)||0)-input;
+    if(node.type==='quantize'){const amount=Math.max(1,Math.min(12,Number(node.interval)||1));return Math.round(input/amount)*amount;}
+    return input;
   }
   return resolve(target.id);
 }
