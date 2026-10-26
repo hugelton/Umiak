@@ -35,7 +35,7 @@ export function evaluatePitch(patch,pitch,source='step'){
     const input=resolve(edge.from);
     if(input===null)return null;
     if(node.type==='transpose')return input+Math.max(-24,Math.min(24,Number(node.semitones)||0));
-    if(node.type==='scale')return input*Math.max(-4,Math.min(4,Number(node.factor)??1));
+    if(node.type==='scale')return input*Math.max(-4,Math.min(4,Number(node.factor ?? 1)));
     if(node.type==='invert')return 2*(Number(node.center)||0)-input;
     if(node.type==='quantize'){const amount=Math.max(1,Math.min(12,Number(node.interval)||1));return Math.round(input/amount)*amount;}
     return input;
