@@ -35,3 +35,13 @@ body{display:flex;flex-direction:column;background:#dce0e3}
 .dock.is-collapsed #dock-toggle{transform:rotate(180deg)}
 .dock-pane[hidden]{display:none}
 @media(max-width:750px){.studio{padding:8px}.patch-stage>header{align-items:flex-start}.module-tools{overflow-x:auto;max-width:100%}.dock{width:calc(100% - 22px);bottom:14px}.dock-tab{padding:0 9px;font-size:10px}.dock-content{max-height:45vh}.appbar{gap:8px;padding:8px 10px}.brand{width:100%;font-size:17px}.nodeboard{background-size:18px 18px}}
+
+.node-sequencer{width:228px}
+.node-seq-steps{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:3px;padding:0 10px 12px}
+.node-seq-steps .mini-step{padding:4px 0;font-size:10px;min-width:0;border-radius:3px;background:#e8edf0}
+.node-seq-steps .mini-step:hover{background:#c5d8e3}
+.node-keyboard{width:260px}
+.mini-keys{display:flex;gap:2px;padding:0 10px 12px;height:63px}
+.mini-keys button{flex:1;min-width:0;padding:2px 0;border-radius:2px;background:#f6f8fa;font-size:9px;touch-action:manipulation}
+.mini-keys button.black-key{background:#364652;color:white}
+.mini-keys button:active{background:#81a4b7;color:white}
