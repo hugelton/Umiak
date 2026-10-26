@@ -89,12 +89,14 @@ function bindNode(node){
   });
 }
 for(const node of nodes)bindNode(node);
+let playingStep=-1;
+window.addEventListener('umiak:playhead',e=>{playingStep=e.detail;document.querySelectorAll('#node-seq-steps .mini-step').forEach((b,i)=>b.classList.toggle('is-playing',i===playingStep));});
 let noteValues=Array.from({length:16},(_,i)=>i%4===0?0:i%4===2?7:null);
 function renderSequence(){
   const host=document.getElementById('node-seq-steps');if(!host)return;
   host.replaceChildren();
   noteValues.forEach((value,index)=>{
-    const b=document.createElement('button');b.className='mini-step';b.textContent=value===null?'·':String(value);
+    const b=document.createElement('button');b.className='mini-step'+(index===playingStep?' is-playing':'');b.textContent=value===null?'·':String(value);
     b.title='Step '+(index+1)+': click to cycle note / rest';
     b.onclick=()=>{
       const next=value===null?0:value===0?7:value===7?12:null;
@@ -151,7 +153,7 @@ window.addEventListener('umiak:restore',e=>{
   }
   patch.connections=[];
   for(const c of p.connections)if(validateConnection(patch,c))patch.connections.push(c);
-  for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;if(!['step','osc'].includes(model.type)){const key={transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[model.type];model[key]=Number(n[key])||0;const input=el.querySelector('input');if(input)input.value=model[key];}el.style.left=n.x+'px';el.style.top=n.y+'px';}}
+  for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;const key={transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[model.type];if(key){model[key]=Number(n[key])||0;const input=el.querySelector('input');if(input)input.value=model[key];}el.style.left=n.x+'px';el.style.top=n.y+'px';}}
   wire();notify();
 });
 new ResizeObserver(wire).observe(board);wire();notify();
