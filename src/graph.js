@@ -3,7 +3,7 @@ export const defaultPatch = () => ({
   connections:[{from:'sequence',out:'pitch',to:'oscillator',in:'pitch'}]
 });
 export function validateConnection(patch,connection){
-  const types={step:{outputs:{pitch:'cv'}},keyboard:{outputs:{pitch:'cv'}},merge:{inputs:{a:'cv',b:'cv'},outputs:{pitch:'cv'}},transpose:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},quantize:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},scale:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},invert:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},osc:{inputs:{pitch:'cv'},outputs:{audio:'audio'}}};
+  const types={step:{outputs:{pitch:'cv'}},keyboard:{outputs:{pitch:'cv'}},lfo:{outputs:{mod:'mod'}},merge:{inputs:{a:'cv',b:'cv'},outputs:{pitch:'cv'}},transpose:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},quantize:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},scale:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},invert:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},osc:{inputs:{pitch:'cv',morph:'mod'},outputs:{audio:'audio'}}};
   const a=patch.nodes.find(n=>n.id===connection.from),b=patch.nodes.find(n=>n.id===connection.to);
   if(!a||!b||a.id===b.id)return false;
   if(types[a.type]?.outputs?.[connection.out]!==types[b.type]?.inputs?.[connection.in])return false;
@@ -41,4 +41,17 @@ export function evaluatePitch(patch,pitch,source='step'){
     return input;
   }
   return resolve(target.id);
+}
+
+export function evaluateMorph(patch,time,manual=0){
+ const osc=patch?.nodes.find(n=>n.type==='osc');
+ const edge=osc&&patch.connections.find(c=>c.to===osc.id&&c.in==='morph');
+ const lfo=edge&&patch.nodes.find(n=>n.id===edge.from&&n.type==='lfo');
+ if(!lfo)return manual;
+ const rate=Math.max(.02,Math.min(20,Number(lfo.rate)||.5));
+ const depth=Math.max(0,Math.min(3,Number(lfo.depth)??1.5));
+ const center=Math.max(0,Math.min(3,Number(lfo.center)??1.5));
+ const phase=2*Math.PI*rate*time;
+ const wave=lfo.shape==='triangle'?2/Math.PI*Math.asin(Math.sin(phase)):Math.sin(phase);
+ return Math.max(0,Math.min(3,center+wave*depth));
 }
