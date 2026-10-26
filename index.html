@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Umiak prototype</title>
+<h1>Umiak</h1><p>Functional controls only; visual design intentionally unspecified.</p>
+<button id="audio">Enable audio</button> <button id="start">Start</button> <button id="stop">Stop</button> <button id="reset">Reset</button>
+<label>Tempo <input id="bpm" type="number" min="20" max="300" value="120"></label>
+<label>Waveform <select id="wave"><option>sine</option><option>triangle</option><option>sawtooth</option><option>square</option></select></label>
+<h2>Keyboard</h2><div id="keys"></div>
+<h2>Step LUT (pitch, semitones relative to C4)</h2>
+<div id="steps"></div>
+<h2>Curve LUT (oscillator waveform)</h2>
+<label>Harmonic <input id="harmonic" type="range" min="1" max="8" value="1"></label>
+<canvas id="curve" width="480" height="120" aria-label="Waveform preview"></canvas>
+<p id="status" role="status">Audio disabled</p>
+<script type="module" src="./src/main.js"></script>
+</html>
