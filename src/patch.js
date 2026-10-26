@@ -2,11 +2,12 @@ import { defaultPatch, validateConnection } from './graph.js';
 const board=document.getElementById('nodeboard'),svg=document.getElementById('wires');
 const patch=defaultPatch();
 const nodes=[...board.querySelectorAll('.node')];
-let active=null,selected=null;
+let active=null,selected=null,dragWire=null;
+const svgNS='http://www.w3.org/2000/svg';
 const byId=id=>nodes.find(n=>n.dataset.node===id);
 function portCenter(id,direction,portName){
   const node=byId(id),selector=direction==='out'?'.ports span:last-child .port':'.ports span:first-child .port';
-  const target=node.querySelector('[data-port="'+portName+'"]')||node.querySelector(selector);
+  const target=node.querySelector('.port[data-port="'+portName+'"][data-direction="'+direction+'"]')||node.querySelector(selector);
   const p=target.getBoundingClientRect(),r=board.getBoundingClientRect();
   return {x:p.left+p.width/2-r.left,y:p.top+p.height/2-r.top};
 }
@@ -14,11 +15,18 @@ function wire(){
   svg.setAttribute('viewBox',`0 0 ${board.clientWidth} ${board.clientHeight}`);
   svg.replaceChildren();
   for(const c of patch.connections){
+    if(!byId(c.from)||!byId(c.to))continue;
     const a=portCenter(c.from,'out',c.out),b=portCenter(c.to,'in',c.in);
     const path=document.createElementNS('http://www.w3.org/2000/svg','path');
     path.setAttribute('d',`M ${a.x} ${a.y} C ${(a.x+b.x)/2} ${a.y}, ${(a.x+b.x)/2} ${b.y}, ${b.x} ${b.y}`);
     svg.append(path);
   }
+}
+function connectPorts(from,out,to,input){
+ const c={from,out,to,in:input};
+ if(!validateConnection(patch,c))return false;
+ patch.connections=patch.connections.filter(e=>!(e.to===to&&e.in===input));
+ patch.connections.push(c);wire();notify();return true;
 }
 function notify(){window.dispatchEvent(new CustomEvent('umiak:patch',{detail:structuredClone(patch)}));}
 function bindNode(node){
@@ -31,8 +39,8 @@ function bindNode(node){
   title.addEventListener('pointermove',e=>{
     if(!active||active.id!==e.pointerId)return;
     const r=board.getBoundingClientRect();
-    const x=Math.max(0,Math.min(r.width-node.offsetWidth,e.clientX-r.left-active.dx));
-    const y=Math.max(0,Math.min(r.height-node.offsetHeight,e.clientY-r.top-active.dy));
+    const x=Math.max(0,Math.min(Math.max(0,r.width-node.offsetWidth),e.clientX-r.left-active.dx));
+    const y=Math.max(0,Math.min(Math.max(0,r.height-node.offsetHeight),e.clientY-r.top-active.dy));
     node.style.left=x+'px';node.style.top=y+'px';
     const model=patch.nodes.find(n=>n.id===node.dataset.node);model.x=x;model.y=y;
     wire();
@@ -40,16 +48,43 @@ function bindNode(node){
   for(const type of ['pointerup','pointercancel'])title.addEventListener(type,()=>{active=null;notify();});
   node.querySelectorAll('.port').forEach((port,i)=>{
     const direction=port.dataset.direction||(['sequence','keyboard'].includes(node.dataset.node)?'out':i===0?'in':'out');
-    port.style.cursor='pointer';
-    port.addEventListener('click',()=>{
-      if(direction==='out'){selected={from:node.dataset.node,out:port.dataset.port|| (node.dataset.node==='oscillator'?'audio':'pitch')};port.title='Output selected';return;}
-      if(!selected)return;
-      const c={...selected,to:node.dataset.node,in:port.dataset.port||'pitch'};
-      if(validateConnection(patch,c)){
-        patch.connections=patch.connections.filter(e=>!(e.to===c.to&&e.in===c.in));
-        patch.connections.push(c);wire();notify();
+    const name=port.dataset.port||(direction==='out'&&node.dataset.node==='oscillator'?'audio':'pitch');
+    port.dataset.direction=direction;port.dataset.port=name;
+    port.title=direction==='out'?'Drag to an input or click to select output':'Connect an output here';
+    port.addEventListener('pointerdown',e=>{
+      e.stopPropagation();
+      if(direction!=='out')return;
+      e.preventDefault();port.setPointerCapture(e.pointerId);
+      dragWire={from:node.dataset.node,out:name,origin:port};
+      selected={from:node.dataset.node,out:name};
+      port.classList.add('port-selected');
+      wire();
+    });
+    port.addEventListener('pointermove',e=>{
+      if(!dragWire||dragWire.origin!==port)return;
+      const r=board.getBoundingClientRect();
+      const start=portCenter(dragWire.from,'out',dragWire.out);
+      const x=e.clientX-r.left,y=e.clientY-r.top;
+      const path=document.createElementNS(svgNS,'path');
+      path.classList.add('wire-preview');
+      path.setAttribute('d',`M ${start.x} ${start.y} C ${(start.x+x)/2} ${start.y}, ${(start.x+x)/2} ${y}, ${x} ${y}`);
+      svg.querySelector('.wire-preview')?.remove();svg.append(path);
+    });
+    port.addEventListener('pointerup',e=>{
+      if(!dragWire||dragWire.origin!==port)return;
+      const hit=document.elementFromPoint(e.clientX,e.clientY)?.closest('.port');
+      if(hit&&hit.dataset.direction==='in'){
+        const target=hit.closest('.node');
+        if(connectPorts(dragWire.from,dragWire.out,target.dataset.node,hit.dataset.port))selected=null;
       }
-      selected=null;
+      port.classList.remove('port-selected');dragWire=null;wire();
+    });
+    port.addEventListener('pointercancel',()=>{
+      port.classList.remove('port-selected');dragWire=null;wire();
+    });
+    port.addEventListener('click',()=>{
+      if(direction==='out'){selected={from:node.dataset.node,out:name};return;}
+      if(selected){connectPorts(selected.from,selected.out,node.dataset.node,name);selected=null;}
     });
   });
 }
