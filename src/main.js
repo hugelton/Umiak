@@ -133,6 +133,8 @@ function paint(e) {
 }
 canvas.addEventListener('pointerdown', e => {
   canvas.setPointerCapture(e.pointerId);
+  $('morph').value=String(editingSlot);
+  refreshMorph();
   lastPoint = point(e);
   curvePoints[lastPoint.x] = lastPoint.y;
   waveSlots[editingSlot]=[...curvePoints];
