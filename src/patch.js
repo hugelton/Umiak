@@ -4,16 +4,17 @@ const patch=defaultPatch();
 const nodes=[...board.querySelectorAll('.node')];
 let active=null,selected=null;
 const byId=id=>nodes.find(n=>n.dataset.node===id);
-function portCenter(id,direction){
+function portCenter(id,direction,portName){
   const node=byId(id),selector=direction==='out'?'.ports span:last-child .port':'.ports span:first-child .port';
-  const p=node.querySelector(selector).getBoundingClientRect(),r=board.getBoundingClientRect();
+  const target=node.querySelector('[data-port="'+portName+'"]')||node.querySelector(selector);
+  const p=target.getBoundingClientRect(),r=board.getBoundingClientRect();
   return {x:p.left+p.width/2-r.left,y:p.top+p.height/2-r.top};
 }
 function wire(){
   svg.setAttribute('viewBox',`0 0 ${board.clientWidth} ${board.clientHeight}`);
   svg.replaceChildren();
   for(const c of patch.connections){
-    const a=portCenter(c.from,'out'),b=portCenter(c.to,'in');
+    const a=portCenter(c.from,'out',c.out),b=portCenter(c.to,'in',c.in);
     const path=document.createElementNS('http://www.w3.org/2000/svg','path');
     path.setAttribute('d',`M ${a.x} ${a.y} C ${(a.x+b.x)/2} ${a.y}, ${(a.x+b.x)/2} ${b.y}, ${b.x} ${b.y}`);
     svg.append(path);
@@ -38,12 +39,12 @@ function bindNode(node){
   });
   for(const type of ['pointerup','pointercancel'])title.addEventListener(type,()=>{active=null;notify();});
   node.querySelectorAll('.port').forEach((port,i)=>{
-    const direction=['sequence','keyboard'].includes(node.dataset.node)?'out':i===0?'in':'out';
+    const direction=port.dataset.direction||(['sequence','keyboard'].includes(node.dataset.node)?'out':i===0?'in':'out');
     port.style.cursor='pointer';
     port.addEventListener('click',()=>{
-      if(direction==='out'){selected={from:node.dataset.node,out:node.dataset.node==='oscillator'?'audio':'pitch'};port.title='Output selected';return;}
+      if(direction==='out'){selected={from:node.dataset.node,out:port.dataset.port|| (node.dataset.node==='oscillator'?'audio':'pitch')};port.title='Output selected';return;}
       if(!selected)return;
-      const c={...selected,to:node.dataset.node,in:'pitch'};
+      const c={...selected,to:node.dataset.node,in:port.dataset.port||'pitch'};
       if(validateConnection(patch,c)){
         patch.connections=patch.connections.filter(e=>!(e.to===c.to&&e.in===c.in));
         patch.connections.push(c);wire();notify();
@@ -80,6 +81,15 @@ function addKeyboard(id='keyboard',x=35,y=255){
 }
 document.getElementById('add-keyboard').onclick=()=>addKeyboard();
 document.getElementById('add-sequence').onclick=()=>{document.querySelector('[data-node="sequence"]')?.scrollIntoView({block:'nearest'});};
+function addMerge(id='merge-'+Date.now(),x=245,y=240){
+ if(patch.nodes.some(n=>n.id===id))return;
+ patch.nodes.push({id,type:'merge',x,y});
+ const node=document.createElement('div');node.className='node';node.dataset.node=id;
+ node.style.left=x+'px';node.style.top=y+'px';
+ node.innerHTML='<div class="title">Merge / Note sources</div><div class="ports merge-ports"><span><i class="port" data-port="a" data-direction="in"></i> A</span><span><i class="port" data-port="b" data-direction="in"></i> B</span><span>pitch <i class="port" data-port="pitch" data-direction="out"></i></span></div>';
+ board.append(node);nodes.push(node);bindNode(node);wire();notify();
+}
+document.getElementById('add-merge').onclick=()=>addMerge();
 function addProcessor(type='transpose',id=type+'-'+Date.now(),x=190,y=170,value=0){
   if(patch.nodes.some(n=>n.id===id))return;
   const key={transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[type];
@@ -98,6 +108,7 @@ document.getElementById('reconnect').onclick=()=>{patch.connections=defaultPatch
 window.addEventListener('umiak:restore',e=>{
   const p=e.detail;
   if(!p?.nodes||!Array.isArray(p.connections))return;
+  for(const n of p.nodes)if(n.type==='merge'&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addMerge(n.id,n.x,n.y);
   for(const n of p.nodes)if(n.type==='keyboard'&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addKeyboard(n.id,n.x,n.y);
   for(const n of p.nodes)if(['transpose','quantize','scale','invert'].includes(n.type)&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addProcessor(n.type,n.id,n.x,n.y,Number(n[{transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[n.type]])||0);
   for(const n of [...patch.nodes])if(!['step','osc'].includes(n.type)&&!p.nodes.some(x=>x.id===n.id)){
