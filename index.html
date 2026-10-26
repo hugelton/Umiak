@@ -5,18 +5,18 @@
 <header class="appbar"><strong class="brand">Umiak</strong>
 <div class="transport"><button id="audio">Enable audio</button><button id="start">▶ Play</button><button id="stop">■ Stop</button><button id="reset">↺ Reset</button></div>
 <label>Tempo <input id="bpm" type="number" min="20" max="300" value="120"></label>
-<p id="status" role="status">Audio disabled</p></header>
+<button id="save">Save project</button><label>Open project <input id="load" type="file" accept=".json,application/json"></label><p id="status" role="status">Audio disabled</p></header>
 <main class="workspace">
 <div class="instrument">
 <section class="panel"><header><h2>Instrument / Keyboard</h2><label>Waveform <select id="wave"><option>sine</option><option>triangle</option><option>sawtooth</option><option>square</option><option selected>custom</option></select></label></header><div class="body"><div id="keys" class="keyboard"></div></div></section>
 <section class="panel"><header><h2>Sequence / Step LUT</h2><span>Pitch · C4 relative</span></header><div class="body"><div id="steps" class="stepgrid"></div></div></section>
 <section class="panel"><header><h2>Oscillator / Curve LUT</h2><label>Harmonic <input id="harmonic" type="range" min="1" max="8" value="1"></label></header><div class="body"><canvas id="curve" class="curve" width="720" height="190" aria-label="Draw oscillator waveform"></canvas></div></section>
 </div>
-<div class="stack"><section class="panel"><header><h2>Patch / Signal Flow</h2><span>Drag modules to arrange</span></header>
+<div class="stack"><section class="panel"><header><h2>Patch / Signal Flow</h2><div><button id="disconnect">Disconnect</button> <button id="reconnect">Connect</button></div></header>
 <div class="nodeboard" id="nodeboard"><svg class="wires" id="wires" aria-hidden="true"></svg>
 <div class="node" data-node="sequence" style="left:20px;top:30px"><div class="title">Step LUT</div><div class="ports"><span>phase</span><span>pitch <i class="port"></i></span></div></div>
 <div class="node" data-node="oscillator" style="left:210px;top:100px"><div class="title">Curve LUT / OSC</div><div class="ports"><span><i class="port"></i> pitch</span><span>audio <i class="port"></i></span></div></div>
 </div></section>
-<section class="panel"><header><h2>Patch Notes</h2></header><div class="body">Step LUT drives oscillator pitch. Curve LUT defines the oscillator waveform. This patch is a live representation of the current signal path; arbitrary routing is not yet enabled.</div></section></div>
+<section class="panel"><header><h2>Patch Notes</h2></header><div class="body">Click the Step LUT output port, then the oscillator pitch input port to connect. Disconnect disables sequence-driven notes; the keyboard remains playable. Drag module headers to arrange.</div></section></div>
 </main><script type="module" src="./src/main.js"></script><script type="module" src="./src/patch.js"></script>
 </body></html>
