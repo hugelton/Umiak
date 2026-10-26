@@ -1,4 +1,5 @@
 import { Playhead } from './lut.js';
+import { evaluatePitch } from './graph.js';
 import { createWaveTable, periodicWave, sequencerValue } from './engine.js';
 const $ = id => document.getElementById(id);
 let ctx, timer, nextTime = 0, step = 0, customWave;
@@ -42,7 +43,8 @@ function tick() {
   const duration = 60 / Math.max(20, Number($('bpm').value) || 120) / 4;
   while (nextTime < ctx.currentTime + .12) {
     const event = sequencerValue(notes, step / notes.length);
-    if (sequenceConnected && event.gate) voice(60 + event.pitch, nextTime, duration * .85);
+    const pitch=patchSnapshot?evaluatePitch(patchSnapshot,event.pitch):null;
+    if (event.gate && pitch!==null) voice(60 + pitch, nextTime, duration * .85);
     step = (step + 1) % notes.length;
     head.phase = step / notes.length;
     nextTime += duration;
