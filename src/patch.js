@@ -53,29 +53,31 @@ function bindNode(node){
   });
 }
 for(const node of nodes)bindNode(node);
-function addTranspose(id='transpose-'+Date.now(),x=190,y=170,semitones=0){
+function addProcessor(type='transpose',id=type+'-'+Date.now(),x=190,y=170,value=0){
   if(patch.nodes.some(n=>n.id===id))return;
-  const model={id,type:'transpose',semitones,x,y};patch.nodes.push(model);
+  const key={transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[type];
+  if(!key)return;
+  const model={id,type,[key]:value,x,y};patch.nodes.push(model);
   const node=document.createElement('div');node.className='node';node.dataset.node=id;
   node.style.left=x+'px';node.style.top=y+'px';
-  node.innerHTML='<div class="title">Transpose</div><div class="ports"><span><i class="port"></i> pitch</span><span>pitch <i class="port"></i></span></div><label style="display:block;padding:0 10px 10px">Semitones <input type="number" min="-24" max="24" value="0" style="width:70px"></label>';
-  const input=node.querySelector('input');input.oninput=()=>{model.semitones=Math.max(-24,Math.min(24,Number(input.value)||0));notify();};
-  input.value=semitones;
+  node.innerHTML='<div class="title">'+({transpose:'Transpose',quantize:'Quantize',scale:'Scale',invert:'Invert'}[type])+'</div><div class="ports"><span><i class="port"></i> pitch</span><span>pitch <i class="port"></i></span></div><label style="display:block;padding:0 10px 10px">'+({transpose:'Semitones',quantize:'Interval',scale:'Factor',invert:'Center'}[type])+' <input type="number" step="0.1" style="width:70px"></label>';
+  const input=node.querySelector('input');input.oninput=()=>{model[key]=Number(input.value)||0;notify();};
+  input.value=value;
   board.append(node);nodes.push(node);bindNode(node);wire();notify();
 }
-document.getElementById('add-transpose').onclick=()=>addTranspose();
+for(const type of ['transpose','quantize','scale','invert'])document.getElementById('add-'+type).onclick=()=>addProcessor(type,undefined,190,170,type==='scale'||type==='quantize'?1:0);
 document.getElementById('disconnect').onclick=()=>{patch.connections=[];wire();notify();};
 document.getElementById('reconnect').onclick=()=>{patch.connections=defaultPatch().connections;wire();notify();};
 window.addEventListener('umiak:restore',e=>{
   const p=e.detail;
   if(!p?.nodes||!Array.isArray(p.connections))return;
-  for(const n of p.nodes)if(n.type==='transpose'&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addTranspose(n.id,n.x,n.y,Number(n.semitones)||0);
-  for(const n of [...patch.nodes])if(n.type==='transpose'&&!p.nodes.some(x=>x.id===n.id)){
+  for(const n of p.nodes)if(['transpose','quantize','scale','invert'].includes(n.type)&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addProcessor(n.type,n.id,n.x,n.y,Number(n[{transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[n.type]])||0);
+  for(const n of [...patch.nodes])if(!['step','osc'].includes(n.type)&&!p.nodes.some(x=>x.id===n.id)){
     byId(n.id)?.remove();nodes.splice(nodes.findIndex(x=>x.dataset.node===n.id),1);patch.nodes.splice(patch.nodes.indexOf(n),1);
   }
   patch.connections=[];
   for(const c of p.connections)if(validateConnection(patch,c))patch.connections.push(c);
-  for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;if(model.type==='transpose')model.semitones=Math.max(-24,Math.min(24,Number(n.semitones)||0));el.style.left=n.x+'px';el.style.top=n.y+'px';}}
+  for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;if(!['step','osc'].includes(model.type)){const key={transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[model.type];model[key]=Number(n[key])||0;const input=el.querySelector('input');if(input)input.value=model[key];}el.style.left=n.x+'px';el.style.top=n.y+'px';}}
   wire();notify();
 });
 new ResizeObserver(wire).observe(board);wire();notify();
