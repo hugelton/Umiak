@@ -2,6 +2,7 @@ import { Playhead } from './lut.js';
 import { createWaveTable, periodicWave, sequencerValue } from './engine.js';
 const $ = id => document.getElementById(id);
 let ctx, timer, nextTime = 0, step = 0, customWave;
+let sequenceConnected = true, patchSnapshot = null;
 const activeCustomOscillators = new Set();
 const curvePoints = Array.from(createWaveTable(1, 64));
 const notes = Array.from({length:16}, (_,i) => i % 4 === 0 ? 0 : i % 4 === 2 ? 7 : null);
@@ -41,7 +42,7 @@ function tick() {
   const duration = 60 / Math.max(20, Number($('bpm').value) || 120) / 4;
   while (nextTime < ctx.currentTime + .12) {
     const event = sequencerValue(notes, step / notes.length);
-    if (event.gate) voice(60 + event.pitch, nextTime, duration * .85);
+    if (sequenceConnected && event.gate) voice(60 + event.pitch, nextTime, duration * .85);
     step = (step + 1) % notes.length;
     head.phase = step / notes.length;
     nextTime += duration;
@@ -129,4 +130,33 @@ for(let i=0;i<13;i++) {
   b.onclick=async()=>{if(!ctx) await $('audio').onclick();voice(60+i,ctx.currentTime,.4);};
   keys.append(b);
 }
+window.addEventListener('umiak:patch', e => {
+  patchSnapshot=e.detail;
+  sequenceConnected=patchSnapshot.connections.some(c=>c.from==='sequence'&&c.to==='oscillator'&&c.in==='pitch');
+});
+$('save').onclick=()=>{
+  const project={version:1,bpm:Number($('bpm').value),wave:$('wave').value,
+    notes:[...notes],curve:[...curvePoints],patch:patchSnapshot};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(project,null,2)],{type:'application/json'}));
+  const a=document.createElement('a');a.href=url;a.download='umiak-project.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+$('load').addEventListener('change',async e=>{
+  const file=e.target.files?.[0];if(!file)return;
+  try{
+    const p=JSON.parse(await file.text());
+    if(p.version!==1||!Array.isArray(p.notes)||p.notes.length!==16||
+      !Array.isArray(p.curve)||p.curve.length!==curvePoints.length||
+      !p.notes.every(n=>n===null||(Number.isFinite(n)&&n>=-24&&n<=36))||
+      !p.curve.every(n=>Number.isFinite(n)&&n>=-1&&n<=1))throw Error('Invalid project');
+    notes.splice(0,notes.length,...p.notes);
+    curvePoints.splice(0,curvePoints.length,...p.curve);
+    $('bpm').value=Math.max(20,Math.min(300,Number(p.bpm)||120));
+    if(['sine','triangle','sawtooth','square','custom'].includes(p.wave))$('wave').value=p.wave;
+    renderSteps();syncWave();
+    if(p.patch)window.dispatchEvent(new CustomEvent('umiak:restore',{detail:p.patch}));
+    $('status').textContent='Project loaded';
+  }catch(error){$('status').textContent='Could not load project: '+error.message;}
+  e.target.value='';
+});
 renderSteps();rebuildWave();
