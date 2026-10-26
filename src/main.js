@@ -3,7 +3,7 @@ import { evaluatePitch } from './graph.js';
 import { createWaveTable, periodicWave, sequencerValue, morphWaveTables } from './engine.js';
 const $ = id => document.getElementById(id);
 let ctx, timer, nextTime = 0, step = 0, customWave;
-let sequenceConnected = true, patchSnapshot = null;
+let patchSnapshot = null;
 const activeCustomOscillators = new Set();
 const waveSlots = [1,2,3,4].map(h => Array.from(createWaveTable(h,64)));
 const curvePoints = Array.from(waveSlots[0]);
@@ -46,6 +46,7 @@ function tick() {
   const duration = 60 / Math.max(20, Number($('bpm').value) || 120) / 4;
   while (nextTime < ctx.currentTime + .12) {
     const event = sequencerValue(notes, step / notes.length);
+    window.dispatchEvent(new CustomEvent('umiak:playhead',{detail:step}));
     const pitch=patchSnapshot?evaluatePitch(patchSnapshot,event.pitch,'step'):null;
     if (event.gate && pitch!==null) voice(60 + pitch, nextTime, duration * .85);
     step = (step + 1) % notes.length;
@@ -78,6 +79,7 @@ function syncWave() {
 $('audio').onclick = async () => {
   ctx ??= new AudioContext();
   await ctx.resume();
+  syncWave();
   $('status').textContent = 'Audio enabled';
 };
 $('start').onclick = async () => {
@@ -85,8 +87,8 @@ $('start').onclick = async () => {
   head.start(); nextTime=ctx.currentTime+.03;
   if (!timer) timer=setInterval(tick,25);
 };
-$('stop').onclick = () => head.stop();
-$('reset').onclick = () => {head.reset();step=0; if(ctx && head.running) nextTime=ctx.currentTime+.03;};
+$('stop').onclick = () => {head.stop();window.dispatchEvent(new CustomEvent('umiak:playhead',{detail:-1}));};
+$('reset').onclick = () => {head.reset();step=0;window.dispatchEvent(new CustomEvent('umiak:playhead',{detail:0})); if(ctx && head.running) nextTime=ctx.currentTime+.03;};
 function rebuildWave() {
   const table = createWaveTable(Number($('harmonic').value), curvePoints.length);
   waveSlots[editingSlot] = Array.from(table);
@@ -165,7 +167,6 @@ window.addEventListener('umiak:step-edit',e=>{
 });
 window.addEventListener('umiak:patch', e => {
   patchSnapshot=e.detail;
-  sequenceConnected=patchSnapshot.connections.some(c=>c.from==='sequence'&&c.to==='oscillator'&&c.in==='pitch');
 });
 $('save').onclick=()=>{
   const project={version:1,bpm:Number($('bpm').value),wave:$('wave').value,
