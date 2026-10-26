@@ -118,6 +118,17 @@ function addKeyboard(id='keyboard',x=35,y=255){
 }
 document.getElementById('add-keyboard').onclick=()=>addKeyboard();
 document.getElementById('add-sequence').onclick=()=>{document.querySelector('[data-node="sequence"]')?.scrollIntoView({block:'nearest'});};
+function addLFO(id='lfo-'+Date.now(),x=285,y=270,params={}){
+ if(patch.nodes.some(n=>n.id===id))return;
+ const model={id,type:'lfo',x,y,rate:params.rate??.5,depth:params.depth??1.5,center:params.center??1.5,shape:params.shape||'sine'};
+ patch.nodes.push(model);
+ const node=document.createElement('div');node.className='node node-lfo';node.dataset.node=id;
+ node.style.left=x+'px';node.style.top=y+'px';
+ node.innerHTML='<div class="title">LFO / Morph</div><div class="ports"><span>0.02–20 Hz</span><span>mod <i class="port" data-direction="out" data-port="mod"></i></span></div><div class="lfo-controls"><label>Rate <input data-param="rate" type="number" min="0.02" max="20" step="0.1"></label><label>Depth <input data-param="depth" type="number" min="0" max="3" step="0.1"></label><label>Center <input data-param="center" type="number" min="0" max="3" step="0.1"></label><select data-param="shape"><option value="sine">Sine</option><option value="triangle">Triangle</option></select></div>';
+ node.querySelectorAll('[data-param]').forEach(input=>{input.value=model[input.dataset.param];input.oninput=()=>{model[input.dataset.param]=input.dataset.param==='shape'?input.value:Number(input.value);notify();};});
+ board.append(node);nodes.push(node);bindNode(node);wire();notify();
+}
+document.getElementById('add-lfo').onclick=()=>addLFO();
 function addMerge(id='merge-'+Date.now(),x=245,y=240){
  if(patch.nodes.some(n=>n.id===id))return;
  patch.nodes.push({id,type:'merge',x,y});
@@ -145,6 +156,7 @@ document.getElementById('reconnect').onclick=()=>{patch.connections=defaultPatch
 window.addEventListener('umiak:restore',e=>{
   const p=e.detail;
   if(!p?.nodes||!Array.isArray(p.connections))return;
+  for(const n of p.nodes)if(n.type==='lfo'&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addLFO(n.id,n.x,n.y,n);
   for(const n of p.nodes)if(n.type==='merge'&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addMerge(n.id,n.x,n.y);
   for(const n of p.nodes)if(n.type==='keyboard'&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addKeyboard(n.id,n.x,n.y);
   for(const n of p.nodes)if(['transpose','quantize','scale','invert'].includes(n.type)&&typeof n.id==='string'&&Number.isFinite(n.x)&&Number.isFinite(n.y))addProcessor(n.type,n.id,n.x,n.y,Number(n[{transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[n.type]])||0);
@@ -153,7 +165,7 @@ window.addEventListener('umiak:restore',e=>{
   }
   patch.connections=[];
   for(const c of p.connections)if(validateConnection(patch,c))patch.connections.push(c);
-  for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;const key={transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[model.type];if(key){model[key]=Number(n[key])||0;const input=el.querySelector('input');if(input)input.value=model[key];}el.style.left=n.x+'px';el.style.top=n.y+'px';}}
+  for(const n of p.nodes){const model=patch.nodes.find(x=>x.id===n.id),el=byId(n.id);if(model&&el&&Number.isFinite(n.x)&&Number.isFinite(n.y)){model.x=n.x;model.y=n.y;const key={transpose:'semitones',quantize:'interval',scale:'factor',invert:'center'}[model.type];if(model.type==='lfo'){for(const param of ['rate','depth','center','shape']){if(n[param]!==undefined){model[param]=n[param];const input=el.querySelector('[data-param="'+param+'"]');if(input)input.value=model[param];}}}if(key){model[key]=Number(n[key])||0;const input=el.querySelector('input');if(input)input.value=model[key];}el.style.left=n.x+'px';el.style.top=n.y+'px';}}
   wire();notify();
 });
 new ResizeObserver(wire).observe(board);wire();notify();
