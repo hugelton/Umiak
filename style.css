@@ -45,3 +45,5 @@ body{display:flex;flex-direction:column;background:#dce0e3}
 .mini-keys button{flex:1;min-width:0;padding:2px 0;border-radius:2px;background:#f6f8fa;font-size:9px;touch-action:manipulation}
 .mini-keys button.black-key{background:#364652;color:white}
 .mini-keys button:active{background:#81a4b7;color:white}
+
+.merge-ports{display:grid!important;grid-template-columns:1fr 1fr;row-gap:12px}.merge-ports span:last-child{grid-column:1/-1;text-align:right}.merge-ports .port[data-direction="in"]{background:#718f9c}.merge-ports .port[data-direction="out"]{background:#527b98}
