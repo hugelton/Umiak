@@ -1,9 +1,9 @@
 export const defaultPatch = () => ({
-  nodes: [{id:'sequence',type:'step',x:20,y:30},{id:'oscillator',type:'osc',x:210,y:100}],
+  nodes: [{id:'sequence',type:'step',x:20,y:30},{id:'oscillator',type:'osc',x:420,y:100}],
   connections:[{from:'sequence',out:'pitch',to:'oscillator',in:'pitch'}]
 });
 export function validateConnection(patch,connection){
-  const types={step:{outputs:{pitch:'cv'}},transpose:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},quantize:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},scale:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},invert:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},osc:{inputs:{pitch:'cv'},outputs:{audio:'audio'}}};
+  const types={step:{outputs:{pitch:'cv'}},keyboard:{outputs:{pitch:'cv'}},transpose:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},quantize:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},scale:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},invert:{inputs:{pitch:'cv'},outputs:{pitch:'cv'}},osc:{inputs:{pitch:'cv'},outputs:{audio:'audio'}}};
   const a=patch.nodes.find(n=>n.id===connection.from),b=patch.nodes.find(n=>n.id===connection.to);
   if(!a||!b||a.id===b.id)return false;
   if(types[a.type]?.outputs?.[connection.out]!==types[b.type]?.inputs?.[connection.in])return false;
@@ -16,7 +16,7 @@ export function isConnected(patch,from,to){
   return patch.connections.some(c=>c.from===from&&c.to===to);
 }
 
-export function evaluatePitch(patch,pitch){
+export function evaluatePitch(patch,pitch,source='step'){
   const target=patch.nodes.find(n=>n.type==='osc');
   if(!target)return null;
   const visited=new Set();
@@ -25,7 +25,7 @@ export function evaluatePitch(patch,pitch){
     visited.add(id);
     const node=patch.nodes.find(n=>n.id===id);
     if(!node)return null;
-    if(node.type==='step')return pitch;
+    if(node.type==='step'||node.type==='keyboard')return node.type===source?pitch:null;
     const edge=patch.connections.find(c=>c.to===id&&c.in==='pitch');
     if(!edge)return null;
     const input=resolve(edge.from);
