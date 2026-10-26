@@ -1,12 +1,15 @@
-import { sampleLUT, Playhead } from './lut.js';
+import { Playhead } from './lut.js';
+import { createWaveTable, periodicWave, sequencerValue } from './engine.js';
 const $ = id => document.getElementById(id);
-let ctx, timer, nextTime = 0, step = 0;
+let ctx, timer, nextTime = 0, step = 0, customWave;
+const curvePoints = Array.from(createWaveTable(1, 64));
 const notes = Array.from({length:16}, (_,i) => i % 4 === 0 ? 0 : i % 4 === 2 ? 7 : null);
 const head = new Playhead();
 function voice(midi, at, length = .2) {
   if (!ctx) return;
   const osc = ctx.createOscillator(), gain = ctx.createGain();
-  osc.type = $('wave').value;
+  if ($('wave').value === 'custom') osc.setPeriodicWave(customWave ?? periodicWave(ctx, createWaveTable(1)));
+  else osc.type = $('wave').value;
   osc.frequency.setValueAtTime(440 * 2 ** ((midi - 69) / 12), at);
   gain.gain.setValueAtTime(0, at);
   gain.gain.linearRampToValueAtTime(.16, at + .008);
@@ -32,8 +35,8 @@ function tick() {
   if (!ctx || !head.running) return;
   const duration = 60 / Math.max(20, Number($('bpm').value) || 120) / 4;
   while (nextTime < ctx.currentTime + .12) {
-    const pitch = sampleLUT(notes.map(n => n ?? 0), step / notes.length, 'step');
-    if (notes[step] !== null) voice(60 + pitch, nextTime, duration * .85);
+    const event = sequencerValue(notes, step / notes.length);
+    if (event.gate) voice(60 + event.pitch, nextTime, duration * .85);
     step = (step + 1) % notes.length;
     head.phase = step / notes.length;
     nextTime += duration;
@@ -44,7 +47,8 @@ function draw() {
   g.clearRect(0,0,c.width,c.height);
   g.beginPath();
   for(let x=0;x<c.width;x++) {
-    const phase=x/c.width, value=Math.sin(phase*2*Math.PI*n);
+    const phase=x/c.width, index=Math.floor(phase*curvePoints.length);
+    const value=curvePoints[index];
     const y=c.height/2-value*c.height*.42;
     if(x===0) g.moveTo(x,y); else g.lineTo(x,y);
   }
@@ -62,7 +66,28 @@ $('start').onclick = async () => {
 };
 $('stop').onclick = () => head.stop();
 $('reset').onclick = () => {head.reset();step=0; if(ctx && head.running) nextTime=ctx.currentTime+.03;};
-$('harmonic').oninput = draw;
+function rebuildWave() {
+  const table = createWaveTable(Number($('harmonic').value), curvePoints.length);
+  curvePoints.splice(0, curvePoints.length, ...table);
+  if (ctx) customWave = periodicWave(ctx, Float32Array.from(curvePoints));
+  draw();
+}
+$('harmonic').oninput = rebuildWave;
+const canvas = $('curve');
+let painting = false;
+function paint(e) {
+  if (!painting) return;
+  const r=canvas.getBoundingClientRect();
+  const x=Math.max(0,Math.min(.999,(e.clientX-r.left)/r.width));
+  const y=Math.max(-1,Math.min(1,1-2*(e.clientY-r.top)/r.height));
+  curvePoints[Math.floor(x*curvePoints.length)] = y;
+  if(ctx) customWave=periodicWave(ctx,Float32Array.from(curvePoints));
+  draw();
+}
+canvas.addEventListener('pointerdown', e=>{painting=true;canvas.setPointerCapture(e.pointerId);paint(e);});
+canvas.addEventListener('pointermove',paint);
+canvas.addEventListener('pointerup',()=>painting=false);
+canvas.addEventListener('pointercancel',()=>painting=false);
 const keys = $('keys');
 for(let i=0;i<13;i++) {
   const b=document.createElement('button');
@@ -70,4 +95,4 @@ for(let i=0;i<13;i++) {
   b.onclick=async()=>{if(!ctx) await $('audio').onclick();voice(60+i,ctx.currentTime,.4);};
   keys.append(b);
 }
-renderSteps();draw();
+renderSteps();rebuildWave();
