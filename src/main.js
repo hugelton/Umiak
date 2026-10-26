@@ -1,5 +1,5 @@
 import { Playhead } from './lut.js';
-import { evaluatePitch } from './graph.js';
+import { evaluatePitch, evaluateMorph } from './graph.js';
 import { createWaveTable, periodicWave, sequencerValue, morphWaveTables } from './engine.js';
 const $ = id => document.getElementById(id);
 let ctx, timer, nextTime = 0, step = 0, customWave;
@@ -8,6 +8,12 @@ const activeCustomOscillators = new Set();
 const waveSlots = [1,2,3,4].map(h => Array.from(createWaveTable(h,64)));
 const curvePoints = Array.from(waveSlots[0]);
 let editingSlot = 0;
+let lastMorphPosition=-1;
+function animateMorph(){
+ const position=evaluateMorph(patchSnapshot,ctx?.currentTime??0,Number($('morph').value));
+ if(Math.abs(position-lastMorphPosition)>.015){lastMorphPosition=position;refreshMorph(position);}
+}
+setInterval(animateMorph,50);
 const notes = Array.from({length:16}, (_,i) => i % 4 === 0 ? 0 : i % 4 === 2 ? 7 : null);
 const head = new Playhead();
 function voice(midi, at, length = .2) {
@@ -94,10 +100,10 @@ function rebuildWave() {
   waveSlots[editingSlot] = Array.from(table);
   refreshMorph();
 }
-function refreshMorph() {
-  const table = morphWaveTables(waveSlots, Number($('morph').value));
+function refreshMorph(position=Number($('morph').value)) {
+  const table = morphWaveTables(waveSlots, position);
   curvePoints.splice(0, curvePoints.length, ...table);
-  $('morph-value').textContent = Number($('morph').value).toFixed(2);
+  $('morph-value').textContent = position.toFixed(2);
   syncWave();
 }
 function editSlot(index) {
@@ -167,6 +173,7 @@ window.addEventListener('umiak:step-edit',e=>{
 });
 window.addEventListener('umiak:patch', e => {
   patchSnapshot=e.detail;
+  lastMorphPosition=-1;
 });
 $('save').onclick=()=>{
   const project={version:1,bpm:Number($('bpm').value),wave:$('wave').value,
