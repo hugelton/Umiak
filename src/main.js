@@ -35,17 +35,18 @@ function renderSteps() {
     input.type = 'number'; input.min = '-24'; input.max = '36'; input.placeholder = 'rest';
     input.value = value ?? '';
     input.style.width = '4em';
-    input.addEventListener('change', () => { notes[i] = input.value === '' ? null : Math.max(-24, Math.min(36, Number(input.value))); });
+    input.addEventListener('change', () => { notes[i] = input.value === '' ? null : Math.max(-24, Math.min(36, Number(input.value)));window.dispatchEvent(new CustomEvent('umiak:notes',{detail:[...notes]})); });
     label.append(input, document.createTextNode(' '));
     $('steps').append(label);
   });
+  window.dispatchEvent(new CustomEvent('umiak:notes',{detail:[...notes]}));
 }
 function tick() {
   if (!ctx || !head.running) return;
   const duration = 60 / Math.max(20, Number($('bpm').value) || 120) / 4;
   while (nextTime < ctx.currentTime + .12) {
     const event = sequencerValue(notes, step / notes.length);
-    const pitch=patchSnapshot?evaluatePitch(patchSnapshot,event.pitch):null;
+    const pitch=patchSnapshot?evaluatePitch(patchSnapshot,event.pitch,'step'):null;
     if (event.gate && pitch!==null) voice(60 + pitch, nextTime, duration * .85);
     step = (step + 1) % notes.length;
     head.phase = step / notes.length;
@@ -150,9 +151,18 @@ const keys = $('keys');
 for(let i=0;i<13;i++) {
   const b=document.createElement('button');
   b.textContent=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B','C'][i];
-  b.onclick=async()=>{if(!ctx) await $('audio').onclick();voice(60+i,ctx.currentTime,.4);};
+  b.onclick=()=>window.dispatchEvent(new CustomEvent('umiak:key',{detail:i}));
   keys.append(b);
 }
+window.addEventListener('umiak:key',async e=>{
+  if(!ctx)await $('audio').onclick();
+  const pitch=patchSnapshot?evaluatePitch(patchSnapshot,Number(e.detail),'keyboard'):null;
+  if(pitch!==null)voice(60+pitch,ctx.currentTime,.4);
+});
+window.addEventListener('umiak:step-edit',e=>{
+  const {index,value}=e.detail;
+  if(index>=0&&index<notes.length){notes[index]=value;renderSteps();}
+});
 window.addEventListener('umiak:patch', e => {
   patchSnapshot=e.detail;
   sequenceConnected=patchSnapshot.connections.some(c=>c.from==='sequence'&&c.to==='oscillator'&&c.in==='pitch');
